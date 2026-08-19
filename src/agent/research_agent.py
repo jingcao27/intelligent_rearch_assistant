@@ -1,7 +1,7 @@
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.prebuilt import create_react_agent
 
 from src.agent.tools import build_search_tool
 from src.config.settings import settings
@@ -42,10 +42,10 @@ class ResearchAgent:
         self.tools = [build_search_tool()]
         self.checkpointer = InMemorySaver()
 
-        self.graph = create_react_agent(
+        self.graph = create_agent(
             model=self.llm,
             tools=self.tools,
-            prompt=SYSTEM_PROMPT,
+            system_prompt=SYSTEM_PROMPT,
             checkpointer=self.checkpointer,
         )
 
