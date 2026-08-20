@@ -25,9 +25,9 @@ def main() -> None:
             continue
 
         print("助手: ", end="", flush=True)
-        answer = agent.chat(user_input)
-        print(answer)
-        print()
+        for chunk in agent.chat_stream(user_input):
+            print(chunk, end="", flush=True)
+        print("\n")
 
 
 if __name__ == "__main__":

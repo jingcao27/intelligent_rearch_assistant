@@ -1,4 +1,4 @@
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
@@ -65,6 +65,33 @@ class ResearchAgent:
             config={"configurable": {"thread_id": self._thread_id}},
         )
         return response["messages"][-1].content
+
+    def chat_stream(self, question: str):
+        """多轮带记忆对话的流式版本。
+
+        逐 token 产出最终回复文本，跳过工具调用相关的中间消息。
+        yield 的每个元素是一个 str 片段（可能为空字符串之外的任意长度）。
+        """
+        for msg, metadata in self.graph.stream(
+            {"messages": [HumanMessage(content=question)]},
+            config={"configurable": {"thread_id": self._thread_id}},
+            stream_mode="messages",
+        ):
+            # 只关心 AIMessage 的文本 chunk；ToolMessage 和带 tool_call_chunks 的 chunk 跳过
+            if not isinstance(msg, AIMessage):
+                continue
+            # 工具调用决策阶段的 chunk 通常 content 为空且带 tool_call_chunks，跳过
+            if getattr(msg, "tool_call_chunks", None):
+                continue
+            content = msg.content if isinstance(msg.content, str) else ""
+            if not content:
+                continue
+            # 多轮工具调用时，最终回复来自最后一个 agent 节点；
+            # LangGraph 1.x 中模型调用节点叫 "model"，工具调用决策节点叫 "agent"
+            node = metadata.get("langgraph_node", "")
+            if node not in ("agent", "model"):
+                continue
+            yield content
 
     def ask(self, question: str) -> str:
         """单轮无记忆查询：使用独立 thread_id，调用后该 thread 不再使用。"""
