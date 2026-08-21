@@ -7,6 +7,34 @@ from langchain_tavily import TavilySearch
 from src.config.settings import settings
 
 
+# 触发"自动加当前年份"的关键词
+_TIME_SENSITIVE_KEYWORDS = (
+    "最新", "近期", "最近", "目前", "当前", "现在", "今天", "今年",
+    "本月", "上周", "昨天", "明天", "现在", "latest", "recent", "current",
+)
+
+
+def _augment_query(query: str) -> str:
+    """如果 query 含时效性关键词且没有当前年份，自动加上当前年份。
+
+    解决 LLM 训练数据截止早于当前年份、把"最新"翻译成过时年份的问题。
+    """
+    import re
+    from datetime import datetime
+
+    current_year = datetime.now().year
+    query_year = str(current_year)
+
+    # 第 1 步：把过时年份（2024 / 2025 等）替换为当前年份
+    query = re.sub(r"20\d{2}", query_year, query)
+
+    # 第 2 步：含时效性关键词且当前年份还没出现 → 前置当前年份
+    if any(kw in query for kw in _TIME_SENSITIVE_KEYWORDS) and query_year not in query:
+        return f"{query_year}年 {query}"
+
+    return query
+
+
 def _build_tavily() -> TavilySearch:
     """构造 Tavily 搜索底层实例。"""
     return TavilySearch(
@@ -26,8 +54,9 @@ def web_search(query: str) -> str:
     当用户问到"今天""现在""最新""近期""目前""今年"等时效性内容时，必须调用本工具。
     输入应该是一个简洁的搜索关键词（中英文皆可）。
     """
+    augmented_query = _augment_query(query)
     tavily = _build_tavily()
-    result = tavily.invoke({"query": query})
+    result = tavily.invoke({"query": augmented_query})
     if isinstance(result, list):
         parts = []
         for item in result:
@@ -37,6 +66,7 @@ def web_search(query: str) -> str:
             parts.append(f"标题：{title}\n内容：{content}\n来源：{url}")
         return "\n\n---\n\n".join(parts) if parts else "(无搜索结果)"
     return str(result)
+
 
 
 # WMO 天气代码 → 中文描述
