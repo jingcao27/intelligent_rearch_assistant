@@ -195,3 +195,53 @@ def build_search_tool():
 def build_weather_tool():
     """对外暴露的工厂函数，返回天气查询工具。"""
     return get_weather
+
+
+@tool
+def retrieve_annual_report(query: str, company: str = "") -> str:
+    """查询 A 股上市公司年报内容。基于 RAG 向量检索，返回相关章节原文。
+
+    当用户问到以下问题时使用本工具：
+    - 某家上市公司年报内容（如"茅台 2024 年报"）
+    - 某公司财务数据（如"宁德时代营收""比亚迪净利润""招商银行风险"）
+    - 某公司业务、战略、风险因素、研发投入、股东结构等年报披露信息
+
+    输入：
+    - query（必填）：要查询的问题或关键词（中文自然语言即可）
+    - company（可选）：限定公司，传公司简称（如"茅台""宁德时代""比亚迪"）
+      不传则跨所有年报检索
+
+    本工具只能查询已下载的 10 家 A 股公司 2024 年年报，包含：
+    贵州茅台、宁德时代、比亚迪、中国平安、招商银行、工商银行、
+    中国石油、中国石化、五粮液、恒瑞医药
+    """
+    from src.rag.vectorstore import search as rag_search
+
+    # 用 $contains 模糊匹配，避免 "茅台" 因精确匹配 "贵州茅台" 而漏检
+    filter_dict = {"company": {"$contains": company}} if company else None
+    try:
+        results = rag_search(query, k=5, filter_dict=filter_dict)
+    except Exception as e:
+        return f"年报检索失败：{e}"
+
+    if not results:
+        if company:
+            return f"在 {company} 年报中未找到相关内容"
+        return "未找到相关年报内容"
+
+    parts = []
+    for r in results:
+        meta = r.get("metadata", {})
+        company_name = meta.get("company", "")
+        stock_code = meta.get("stock_code", "")
+        page = meta.get("page", "?")
+        text = r.get("text", "")
+        parts.append(
+            f"[{company_name}({stock_code}) 第 {page} 页]\n{text}"
+        )
+    return "\n\n---\n\n".join(parts)
+
+
+def build_rag_tool():
+    """对外暴露的工厂函数，返回年报检索工具。"""
+    return retrieve_annual_report

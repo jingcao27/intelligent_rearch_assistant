@@ -26,3 +26,9 @@ Thumbs.db
 .ruff_cache/
 
 *.log
+
+# 数据集：PDF 年报 + 向量库（可重新下载/重建，不入库）
+data/
+
+# 临时调试脚本
+debug_rag_e2e.py

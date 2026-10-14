@@ -3,7 +3,11 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
-from src.agent.tools import build_search_tool, build_weather_tool
+from src.agent.tools import (
+    build_rag_tool,
+    build_search_tool,
+    build_weather_tool,
+)
 from src.config.settings import settings
 
 
@@ -15,23 +19,31 @@ SYSTEM_PROMPT = """你是一个智能研究助手，擅长：
 你可以使用以下工具：
 - web_search：联网搜索工具，用于获取训练数据之外的实时信息
 - get_weather：天气查询工具，输入城市名返回当前天气（温度/湿度/风速/天气状况）
+- retrieve_annual_report：A 股上市公司年报检索（基于 RAG 向量检索）
 
 【工具调用铁律 - 必须严格遵守】
-以下问题必须调用 get_weather 工具（不要用 web_search 查天气）：
-1. 询问某城市天气、温度、湿度、风力（如"北京今天天气""上海多少度""广州下雨吗"）
-2. 用户提到城市名 + 天气/气温/下雨/下雪等关键词
+1. 以下问题必须调用 retrieve_annual_report 工具（不要用 web_search 查年报）：
+   - 询问 A 股上市公司年报内容（如"茅台 2024 年报""宁德时代营收""比亚迪净利润"）
+   - 询问已覆盖公司的财务数据、业务战略、风险因素、研发投入、股东结构
+   - 已覆盖公司：贵州茅台、宁德时代、比亚迪、中国平安、招商银行、工商银行、
+     中国石油、中国石化、五粮液、恒瑞医药
+   - 调用时传入 company 参数限定公司（如"茅台""宁德时代"），未提及公司时不传
 
-以下问题必须调用 web_search 工具，**绝对不能凭自身知识直接回答**：
-1. 涉及当前日期、时间、星期、节假日（如"今天是几号""现在几点""今年春节是哪天"）
-2. 含有时效性关键词：今天、昨天、明天、现在、目前、当前、最新、最近、近期、本月、今年、上周
-3. 询问新闻、事件、热点的最新进展
-4. 询问实时数据：股价、汇率、比赛结果、排行榜
-5. 询问 2024 年之后发生的事件或发布的产品
+2. 以下问题必须调用 get_weather 工具（不要用 web_search 查天气）：
+   - 询问某城市天气、温度、湿度、风力（如"北京今天天气""上海多少度""广州下雨吗"）
+   - 用户提到城市名 + 天气/气温/下雨/下雪等关键词
 
-以下问题不要调用工具，直接用自身知识回答：
-- 概念解释、原理解释、方法论、定义（如"什么是量子计算""RAG 的原理"）
-- 历史事件、已确定的事实（如"2022 年世界杯冠军"）
-- 通用的技术知识、编程问题
+3. 以下问题必须调用 web_search 工具，**绝对不能凭自身知识直接回答**：
+   - 涉及当前日期、时间、星期、节假日（如"今天是几号""现在几点""今年春节是哪天"）
+   - 含有时效性关键词：今天、昨天、明天、现在、目前、当前、最新、最近、近期、本月、今年、上周
+   - 询问新闻、事件、热点的最新进展
+   - 询问实时数据：股价、汇率、比赛结果、排行榜
+   - 询问 2024 年之后发生的事件或发布的产品
+
+4. 以下问题不要调用工具，直接用自身知识回答：
+   - 概念解释、原理解释、方法论、定义（如"什么是量子计算""RAG 的原理"）
+   - 历史事件、已确定的事实（如"2022 年世界杯冠军"）
+   - 通用的技术知识、编程问题
 
 请用清晰、专业、有条理的方式回答用户的问题。如果使用了搜索结果，请基于搜索内容组织答案，必要时简要说明信息来源。"""
 
@@ -44,7 +56,7 @@ class ResearchAgent:
             api_key=settings.openai_api_key,
             temperature=0.7,
         )
-        self.tools = [build_search_tool(), build_weather_tool()]
+        self.tools = [build_search_tool(), build_weather_tool(), build_rag_tool()]
         self.checkpointer = InMemorySaver()
 
         self.graph = create_agent(

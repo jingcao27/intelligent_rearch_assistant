@@ -20,7 +20,7 @@ def test_research_agent_init():
         from src.agent.research_agent import ResearchAgent
         agent = ResearchAgent()
         assert agent.graph is not None
-        assert len(agent.tools) == 2  # web_search + get_weather
+        assert len(agent.tools) == 3  # web_search + get_weather + retrieve_annual_report
         assert agent._thread_id == "session-0"
 
 
